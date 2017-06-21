@@ -1,0 +1,51 @@
+Netty 源码分析之BootStrap
+
+### AbstractBootStrap:
+  * __EventLoopGroup__   
+  ![EventExecutorGroup](image/EventExecutorGroup.png)  
+  EventExecutorGroup实现原生ScheduledExecutorService，它是一个线程调度执行器，包含一组执行单元EventExecutor。
+  EventExecutor其实是一类特殊的EventLoopGroup(继承)，主要用于判断线程是否在事件循环中执行。
+  EventLoopGroup继承自EventExecutorGroup, 支持Channel的注册到当前调度器中，EventLoopGroup以EventLoop为单元管理注册的Channel, 一个Channel的所有IO操作都由EventLoop处理。
+  * __SocketAddress__
+  * __ChannelHandler__  
+  服务端监听Channel或者客户端主动建连Channel的处理器
+  * __other__  
+  管道属性以及其他配置属性值  
+  继承自AbstractBootStrap的ServerBootStrap和BootStrap会拥有自己私有的线程组，共用父类的线程组
+
+### AbstractBootStrapConfig  
+Expose AbstractBootStrap's configuration.子类必须包含一个此配置类的子类，以提供关于BootStrap成员属性的访问入口
+
+### Example
+```
+EventLoopGroup bossGroup = new NioEventLoopGroup(1);
+EventLoopGroup workerGroup = new NioEventLoopGroup();
+try {
+    ServerBootstrap b = new ServerBootstrap();
+	b.group(bossGroup, workerGroup)
+	 .channel(NioServerSocketChannel.class)
+	 .option(ChannelOption.SO_BACKLOG, 100)
+	 .handler(new LoggingHandler(LogLevel.INFO))
+	 .childHandler(new ChannelInitializer<SocketChannel>() {
+		 @Override
+		 public void initChannel(SocketChannel ch) throws Exception {
+			 ChannelPipeline p = ch.pipeline();
+			 if (sslCtx != null) {
+				 p.addLast(sslCtx.newHandler(ch.alloc()));
+			 }
+			 //p.addLast(new LoggingHandler(LogLevel.INFO));
+			 p.addLast(new EchoServerHandler());
+		 }
+	 });
+
+	// Start the server.
+	ChannelFuture f = b.bind(PORT).sync();
+	// Wait until the server socket is closed.
+	f.channel().closeFuture().sync();
+} finally {
+	// Shut down all event loops to terminate all threads.
+	bossGroup.shutdownGracefully();
+	workerGroup.shutdownGracefully();
+}
+```
+代码首先创建两个线程组
